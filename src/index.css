@@ -1,0 +1,47 @@
+@font-face {
+  font-family: 'Ownglyph Park Da Hyun';
+  src: url('../온글잎 박다현체.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --bg: #f6f1eb;
+  --paper: #fffdf9;
+  --ink: #5f5751;
+  --ink-strong: #3f3833;
+  --muted: #84786e;
+  --line: #e6ddd3;
+
+  font-family: 'Ownglyph Park Da Hyun', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  color: var(--ink);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.42) 1px, transparent 1px) 0 0 / 44px 44px,
+    linear-gradient(180deg, rgba(255, 255, 255, 0.36) 1px, transparent 1px) 0 0 / 44px 44px,
+    var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  margin: 0;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+#root {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
