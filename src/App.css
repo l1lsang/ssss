@@ -147,6 +147,13 @@ h2 {
   gap: 14px;
 }
 
+.profile-fields {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(216, 206, 196, 0.82);
+}
+
 .auth-form label,
 .date-field,
 .soft-input,
@@ -248,6 +255,13 @@ textarea:focus-visible {
   margin: 0;
   color: #9b4a4a;
   font-size: 1.04rem;
+}
+
+.field-help {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.35;
 }
 
 .setup-panel,

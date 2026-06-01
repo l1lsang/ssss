@@ -4,6 +4,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
+  updateProfile,
   type User,
 } from 'firebase/auth'
 import {
@@ -38,12 +39,23 @@ type EntryWithId = JournalEntry & {
   id: string
 }
 
+type ProfileDraft = {
+  nickname: string
+  discordId: string
+  instagramId: string
+}
+
 function App() {
   const [user, setUser] = useState<User | null>(null)
   const [authLoading, setAuthLoading] = useState(firebaseReady)
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [profileDraft, setProfileDraft] = useState<ProfileDraft>({
+    nickname: '',
+    discordId: '',
+    instagramId: '',
+  })
   const [authError, setAuthError] = useState('')
   const [entries, setEntries] = useState<EntryWithId[]>([])
   const [selectedDate, setSelectedDate] = useState(todayKey)
@@ -138,11 +150,34 @@ function App() {
 
     try {
       if (authMode === 'signup') {
-        await createUserWithEmailAndPassword(auth, email, password)
+        const normalizedProfile = normalizeProfileDraft(profileDraft)
+
+        if (!normalizedProfile.nickname) {
+          setAuthError('닉네임을 입력해주세요.')
+          return
+        }
+
+        if (!normalizedProfile.discordId && !normalizedProfile.instagramId) {
+          setAuthError('디스코드 아이디나 인스타 아이디 중 하나를 입력해주세요.')
+          return
+        }
+
+        const credential = await createUserWithEmailAndPassword(auth, email, password)
+
+        await updateProfile(credential.user, {
+          displayName: normalizedProfile.nickname,
+        })
+        await setDoc(doc(db, 'users', credential.user.uid), {
+          ...normalizedProfile,
+          email: credential.user.email ?? email,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
       } else {
         await signInWithEmailAndPassword(auth, email, password)
       }
       setPassword('')
+      setProfileDraft({ nickname: '', discordId: '', instagramId: '' })
       setNotice({ tone: 'good', text: '로그인됐어요. 오늘의 마음부터 천천히 적어볼게요.' })
     } catch (error) {
       setAuthError(authErrorMessage(error))
@@ -376,10 +411,15 @@ function App() {
           authMode={authMode}
           email={email}
           password={password}
+          profileDraft={profileDraft}
           error={authError}
-          onAuthModeChange={setAuthMode}
+          onAuthModeChange={(mode) => {
+            setAuthError('')
+            setAuthMode(mode)
+          }}
           onEmailChange={setEmail}
           onPasswordChange={setPassword}
+          onProfileChange={setProfileDraft}
           onSubmit={handleAuth}
         />
       )}
@@ -412,10 +452,12 @@ type AuthPanelProps = {
   authMode: 'login' | 'signup'
   email: string
   password: string
+  profileDraft: ProfileDraft
   error: string
   onAuthModeChange: (mode: 'login' | 'signup') => void
   onEmailChange: (email: string) => void
   onPasswordChange: (password: string) => void
+  onProfileChange: (profile: ProfileDraft) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }
 
@@ -423,23 +465,66 @@ function AuthPanel({
   authMode,
   email,
   password,
+  profileDraft,
   error,
   onAuthModeChange,
   onEmailChange,
   onPasswordChange,
+  onProfileChange,
   onSubmit,
 }: AuthPanelProps) {
+  const updateProfileDraft = (key: keyof ProfileDraft, value: string) => {
+    onProfileChange({ ...profileDraft, [key]: value })
+  }
+
   return (
     <section className="auth-panel" aria-labelledby="auth-title">
       <div>
         <p className="section-label">회원 공간</p>
         <h2 id="auth-title">{authMode === 'login' ? '로그인' : '회원가입'}</h2>
         <p className="auth-help">
-          기록은 계정별로 따로 저장돼요. 비밀번호는 6자 이상으로 만들어주세요.
+          기록은 계정별로 따로 저장돼요. 가입할 때 닉네임과 연락 아이디를 함께 남겨요.
         </p>
       </div>
 
       <form className="auth-form" onSubmit={onSubmit}>
+        {authMode === 'signup' ? (
+          <div className="profile-fields">
+            <label>
+              <span>닉네임</span>
+              <input
+                type="text"
+                value={profileDraft.nickname}
+                onChange={(event) => updateProfileDraft('nickname', event.target.value)}
+                placeholder="불리고 싶은 이름"
+                maxLength={32}
+                required
+              />
+            </label>
+            <label>
+              <span>디스코드 아이디</span>
+              <input
+                type="text"
+                value={profileDraft.discordId}
+                onChange={(event) => updateProfileDraft('discordId', event.target.value)}
+                placeholder="예: friend#1234 또는 friend"
+                maxLength={80}
+              />
+            </label>
+            <label>
+              <span>인스타 아이디</span>
+              <input
+                type="text"
+                value={profileDraft.instagramId}
+                onChange={(event) => updateProfileDraft('instagramId', event.target.value)}
+                placeholder="예: my_account"
+                maxLength={80}
+              />
+            </label>
+            <p className="field-help">디스코드나 인스타 중 하나만 적어도 괜찮아요.</p>
+          </div>
+        ) : null}
+
         <label>
           <span>이메일</span>
           <input
@@ -611,6 +696,14 @@ function getString(value: unknown) {
 
 function getStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function normalizeProfileDraft(profile: ProfileDraft) {
+  return {
+    nickname: profile.nickname.trim(),
+    discordId: profile.discordId.trim(),
+    instagramId: profile.instagramId.trim().replace(/^@/, ''),
+  }
 }
 
 function authErrorMessage(error: unknown) {

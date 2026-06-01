@@ -57,6 +57,8 @@ export default async function handler(request, response) {
       return response.status(400).json({ ok: false, error: 'Invalid journal entry' })
     }
 
+    const profileSnapshot = await admin.firestore(app).doc(`users/${decodedToken.uid}`).get()
+    const profile = profileSnapshot.exists ? profileSnapshot.data() : {}
     const botToken = process.env.TELEGRAM_BOT_TOKEN
     const chatId = process.env.TELEGRAM_CHAT_ID
 
@@ -71,7 +73,7 @@ export default async function handler(request, response) {
       },
       body: JSON.stringify({
         chat_id: chatId,
-        text: formatTelegramMessage(decodedToken, entry),
+        text: formatTelegramMessage(decodedToken, entry, profile),
         disable_web_page_preview: true,
       }),
     })
@@ -94,11 +96,18 @@ export default async function handler(request, response) {
   }
 }
 
-function formatTelegramMessage(user, entry) {
+function formatTelegramMessage(user, entry, profile = {}) {
+  const nickname = formatValue(profile.nickname || user.name || user.email || user.uid)
+  const discordId = formatValue(profile.discordId)
+  const instagramId = formatValue(profile.instagramId && `@${String(profile.instagramId).replace(/^@/, '')}`)
+
   const lines = [
     '새 감정 일지가 저장됐어요.',
     '',
-    `사용자: ${user.email || user.uid}`,
+    `닉네임: ${nickname}`,
+    `디스코드: ${discordId}`,
+    `인스타: ${instagramId}`,
+    `이메일: ${user.email || '비어 있음'}`,
     `날짜: ${entry.date}`,
     `마음 날씨: ${entry.weather || '비어 있음'}`,
     `감정: ${formatList(entry.emotions)}`,
@@ -120,4 +129,8 @@ function formatList(value, extra = '') {
   const allItems = extra ? [...list, extra] : list
 
   return allItems.length ? allItems.join(', ') : '비어 있음'
+}
+
+function formatValue(value) {
+  return value ? String(value) : '비어 있음'
 }
