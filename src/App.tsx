@@ -35,6 +35,13 @@ type Notice = {
   text: string
 }
 
+type ComfortResult = {
+  status: 'generated' | 'skipped' | 'failed'
+  comfort?: string
+}
+
+type ComfortOrigin = 'default' | 'generated' | 'fallback' | 'saved'
+
 type EntryWithId = JournalEntry & {
   id: string
 }
@@ -65,6 +72,9 @@ function App() {
     text: '답하지 못하는 칸은 비워두어도 괜찮아요.',
   })
   const [saving, setSaving] = useState(false)
+  const [comfortLoading, setComfortLoading] = useState(false)
+  const [comfortChecked, setComfortChecked] = useState(false)
+  const [comfortOrigin, setComfortOrigin] = useState<ComfortOrigin>('default')
 
   useEffect(() => {
     if (!firebaseReady) return undefined
@@ -102,14 +112,20 @@ function App() {
 
       if (entrySnap.exists()) {
         setDraft(normalizeEntry(entrySnap.id, entrySnap.data()))
+        setComfortOrigin('saved')
+        setComfortChecked(true)
       } else {
         setDraft(createEmptyEntry(selectedDate))
+        setComfortOrigin('default')
+        setComfortChecked(false)
       }
     }
 
     loadEntry().catch(() => {
       if (!cancelled) {
         setDraft(createEmptyEntry(selectedDate))
+        setComfortOrigin('default')
+        setComfortChecked(false)
       }
     })
 
@@ -137,11 +153,20 @@ function App() {
   }, [draft])
 
   const updateDraft = <Key extends keyof JournalEntry>(key: Key, value: JournalEntry[Key]) => {
+    const resetComfort = shouldResetComfort(key)
+
     setDraft((current) => ({
       ...current,
       [key]: value,
-      comfort: key === 'date' ? comfortForDate(value as string) : current.comfort,
+      comfort: resetComfort
+        ? comfortForDate(key === 'date' ? (value as string) : current.date)
+        : current.comfort,
     }))
+
+    if (resetComfort) {
+      setComfortOrigin('default')
+      setComfortChecked(false)
+    }
   }
 
   const handleAuth = async (event: FormEvent<HTMLFormElement>) => {
@@ -185,24 +210,27 @@ function App() {
   }
 
   const handleSave = async () => {
-    if (!user || saving) return
+    if (!user || saving || comfortLoading) return
 
-    const entryToSave = {
-      ...draft,
-      date: selectedDate,
-      comfort: comfortForDate(selectedDate),
-    }
+    const entryToSave = entryWithSelectedDate(draft, selectedDate)
 
     if (!hasEntryContent(entryToSave)) {
       setNotice({ tone: 'warn', text: '아무것도 쓰지 않아도 괜찮지만, 저장하려면 표시 하나만 남겨주세요.' })
       return
     }
 
+    if (!comfortChecked) {
+      setNotice({ tone: 'warn', text: '위로 문장을 작성자가 확인한 뒤 저장할 수 있어요.' })
+      return
+    }
+
     setSaving(true)
-    setNotice({ tone: 'calm', text: '조용히 저장하고 있어요.' })
+    setNotice({ tone: 'calm', text: '확인한 위로 문장과 함께 저장하고 있어요.' })
 
     try {
       const entryRef = doc(db, 'users', user.uid, 'entries', selectedDate)
+
+      setDraft(entryToSave)
       await setDoc(
         entryRef,
         {
@@ -214,19 +242,53 @@ function App() {
       )
 
       const telegramResult = await sendTelegramNotice(user, entryToSave)
-
-      if (telegramResult === 'sent') {
-        setNotice({ tone: 'good', text: '저장됐고, 텔레그램으로도 보냈어요.' })
-      } else if (telegramResult === 'skipped') {
-        setNotice({ tone: 'good', text: '저장됐어요. 텔레그램 환경 변수는 아직 비어 있어요.' })
-      } else {
-        setNotice({ tone: 'warn', text: '일지는 저장됐어요. 텔레그램 전송은 Vercel API 설정을 확인해주세요.' })
-      }
+      setComfortOrigin('saved')
+      setComfortChecked(true)
+      setNotice(saveNotice(telegramResult))
     } catch {
       setNotice({ tone: 'warn', text: '저장하지 못했어요. Firebase 설정과 권한을 확인해주세요.' })
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleGenerateComfort = async () => {
+    if (!user || comfortLoading || saving) return
+
+    const baseEntry = entryWithSelectedDate(draft, selectedDate)
+
+    if (!hasEntryContent(baseEntry)) {
+      setNotice({ tone: 'warn', text: '위로 문장을 만들려면 표시 하나나 짧은 문장 하나를 남겨주세요.' })
+      return
+    }
+
+    setComfortLoading(true)
+    setComfortChecked(false)
+    setNotice({ tone: 'calm', text: '작성자가 먼저 볼 수 있게 위로 문장을 쓰는 중이에요.' })
+
+    try {
+      const comfortResult = await generateComfort(user, baseEntry)
+      const nextEntry = {
+        ...baseEntry,
+        comfort: comfortResult.comfort || baseEntry.comfort,
+      }
+
+      setDraft(nextEntry)
+      setComfortOrigin(comfortResult.status === 'generated' ? 'generated' : 'fallback')
+      setNotice(comfortNotice(comfortResult.status))
+    } finally {
+      setComfortLoading(false)
+    }
+  }
+
+  const handleCheckComfort = () => {
+    if (comfortOrigin === 'default') {
+      setNotice({ tone: 'warn', text: '먼저 오늘 기록을 바탕으로 위로 문장을 만들어주세요.' })
+      return
+    }
+
+    setComfortChecked(true)
+    setNotice({ tone: 'good', text: '작성자가 확인했어요. 이제 이 문장으로 저장하고 보낼 수 있어요.' })
   }
 
   const handleDateChange = (date: string) => {
@@ -386,10 +448,15 @@ function App() {
               />
             </div>
 
-            <footer className="comfort-line">
-              <span>오늘의 위로 문장</span>
-              <p>{comfortForDate(selectedDate)}</p>
-            </footer>
+            <ComfortReview
+              busy={saving}
+              checked={comfortChecked}
+              comfort={draft.comfort || comfortForDate(selectedDate)}
+              loading={comfortLoading}
+              origin={comfortOrigin}
+              onCheck={handleCheckComfort}
+              onGenerate={handleGenerateComfort}
+            />
 
             <div className={`notice ${notice.tone}`} role="status" aria-live="polite">
               <span>{notice.text}</span>
@@ -397,8 +464,19 @@ function App() {
             </div>
 
             <div className="action-row">
-              <button className="primary-button" type="button" onClick={handleSave} disabled={saving}>
-                {saving ? '저장 중' : '저장하고 텔레그램 보내기'}
+              <button
+                className="primary-button"
+                type="button"
+                onClick={handleSave}
+                disabled={saving || comfortLoading}
+              >
+                {saving
+                  ? '저장 중'
+                  : comfortLoading
+                    ? '위로 문장 작성 중'
+                    : comfortChecked
+                      ? '저장하고 텔레그램 보내기'
+                      : '위로 문장 확인 후 저장'}
               </button>
               <button className="ghost-button" type="button" onClick={() => window.print()}>
                 인쇄하기
@@ -672,6 +750,51 @@ function TextAreaField({ label, value, placeholder, onChange }: TextAreaFieldPro
   )
 }
 
+type ComfortReviewProps = {
+  busy: boolean
+  checked: boolean
+  comfort: string
+  loading: boolean
+  origin: ComfortOrigin
+  onCheck: () => void
+  onGenerate: () => void
+}
+
+function ComfortReview({
+  busy,
+  checked,
+  comfort,
+  loading,
+  origin,
+  onCheck,
+  onGenerate,
+}: ComfortReviewProps) {
+  const canCheck = origin !== 'default' && !checked && !loading
+
+  return (
+    <section className={checked ? 'comfort-review checked' : 'comfort-review'} aria-labelledby="comfort-title">
+      <header className="comfort-review-header">
+        <div>
+          <p className="section-label">작성자 확인</p>
+          <h3 id="comfort-title">오늘의 위로 문장</h3>
+        </div>
+        <span className={checked ? 'comfort-status checked' : 'comfort-status'}>
+          {comfortStatusText(origin, checked, loading)}
+        </span>
+      </header>
+      <p className="comfort-preview">{loading ? '문장을 쓰는 중이에요.' : comfort}</p>
+      <div className="comfort-actions">
+        <button className="ghost-button" type="button" onClick={onGenerate} disabled={loading || busy}>
+          {origin === 'default' ? '위로 문장 만들기' : '다시 만들기'}
+        </button>
+        <button className="primary-button" type="button" onClick={onCheck} disabled={!canCheck || busy}>
+          {checked ? '확인 완료' : '확인했어요'}
+        </button>
+      </div>
+    </section>
+  )
+}
+
 function normalizeEntry(id: string, data: Record<string, unknown>): EntryWithId {
   const date = getString(data.date) || id
 
@@ -717,6 +840,39 @@ function authErrorMessage(error: unknown) {
   return '로그인 중 문제가 생겼어요. 잠시 후 다시 시도해주세요.'
 }
 
+function shouldResetComfort(key: keyof JournalEntry) {
+  return key !== 'comfort'
+}
+
+function entryWithSelectedDate(entry: JournalEntry, selectedDate: string): JournalEntry {
+  return {
+    ...entry,
+    date: selectedDate,
+    comfort: entry.comfort || comfortForDate(selectedDate),
+  }
+}
+
+function comfortStatusText(origin: ComfortOrigin, checked: boolean, loading: boolean) {
+  if (loading) return '작성 중'
+  if (checked) return '확인 완료'
+  if (origin === 'generated') return '확인 필요'
+  if (origin === 'fallback') return '기본 문장 확인'
+  if (origin === 'saved') return '저장된 문장'
+  return '작성 전'
+}
+
+function comfortNotice(status: ComfortResult['status']): Notice {
+  if (status === 'generated') {
+    return { tone: 'good', text: '위로 문장을 준비했어요. 작성자가 확인하면 저장할 수 있어요.' }
+  }
+
+  if (status === 'skipped') {
+    return { tone: 'warn', text: 'OpenAI 환경 변수가 비어 있어 기본 문장을 준비했어요. 작성자 확인이 필요해요.' }
+  }
+
+  return { tone: 'warn', text: 'GPT 문장 생성은 실패해서 기본 문장을 준비했어요. 작성자 확인이 필요해요.' }
+}
+
 async function sendTelegramNotice(user: User, entry: JournalEntry) {
   try {
     const token = await user.getIdToken()
@@ -735,6 +891,45 @@ async function sendTelegramNotice(user: User, entry: JournalEntry) {
   } catch {
     return 'failed'
   }
+}
+
+async function generateComfort(user: User, entry: JournalEntry): Promise<ComfortResult> {
+  try {
+    const token = await user.getIdToken()
+    const response = await fetch('/api/generate-comfort', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ entry }),
+    })
+    const payload = (await response.json().catch(() => null)) as {
+      generated?: boolean
+      comfort?: string
+    } | null
+
+    if (!response.ok) return { status: 'failed' }
+
+    return {
+      status: payload?.generated ? 'generated' : 'skipped',
+      comfort: payload?.comfort,
+    }
+  } catch {
+    return { status: 'failed' }
+  }
+}
+
+function saveNotice(telegramStatus: Awaited<ReturnType<typeof sendTelegramNotice>>): Notice {
+  if (telegramStatus === 'sent') {
+    return { tone: 'good', text: '확인한 위로 문장까지 저장됐고, 텔레그램으로도 보냈어요.' }
+  }
+
+  if (telegramStatus === 'skipped') {
+    return { tone: 'good', text: '확인한 위로 문장까지 저장됐어요.' }
+  }
+
+  return { tone: 'warn', text: '일지는 저장됐어요. 텔레그램 전송은 Vercel API 설정을 확인해주세요.' }
 }
 
 export default App

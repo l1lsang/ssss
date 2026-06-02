@@ -5,6 +5,9 @@
   "functions": {
     "api/send-telegram.js": {
       "maxDuration": 10
+    },
+    "api/generate-comfort.js": {
+      "maxDuration": 20
     }
   },
   "rewrites": [

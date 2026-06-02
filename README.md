@@ -4,6 +4,7 @@ Firebase Auth/Firestore와 Vercel 서버리스 함수를 쓰는 데일리 감정
 사용자는 이메일로 회원가입/로그인하고, 날짜별 기록을 저장하고, 지난 기록을 다시 볼 수 있습니다.
 회원가입 때 닉네임과 디스코드 또는 인스타 아이디를 함께 저장합니다.
 저장 후에는 Vercel API 함수가 Firebase ID 토큰을 확인한 뒤 텔레그램으로 기록과 사용자 프로필을 보냅니다.
+OpenAI API 키가 있으면 사용자가 적은 기록을 바탕으로 날짜별 고정 문장 대신 맞춤 위로 문장을 생성합니다.
 
 ## 로컬 설정
 
@@ -36,6 +37,8 @@ VITE_FIREBASE_APP_ID
 서버에서만 써야 하는 값:
 
 ```txt
+OPENAI_API_KEY
+OPENAI_MODEL
 TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID
 FIREBASE_PROJECT_ID
@@ -45,6 +48,7 @@ FIREBASE_PRIVATE_KEY
 
 Firebase Admin 키는 위 세 값 대신 `FIREBASE_SERVICE_ACCOUNT_BASE64` 또는
 `FIREBASE_SERVICE_ACCOUNT_JSON` 하나로 넣어도 됩니다.
+`OPENAI_MODEL`은 비워두면 `gpt-5.4-mini`를 사용합니다.
 
 ## 데이터 구조
 

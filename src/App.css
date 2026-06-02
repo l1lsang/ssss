@@ -166,8 +166,7 @@ h2 {
 .date-field span,
 .soft-input span,
 .text-area-field span,
-.journal-field legend,
-.comfort-line span {
+.journal-field legend {
   color: var(--ink-strong);
   font-size: 1.1rem;
   font-weight: 700;
@@ -427,20 +426,72 @@ textarea:focus-visible {
   margin-top: 14px;
 }
 
-.comfort-line {
+.comfort-review {
   display: grid;
-  gap: 8px;
+  gap: 14px;
   padding: 18px 20px;
   border-left: 5px solid #d8cde8;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.58);
 }
 
-.comfort-line p {
+.comfort-review.checked {
+  border-left-color: #9fbdb6;
+  background: #f3fbf8;
+}
+
+.comfort-review-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.comfort-review h3 {
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: 1.42rem;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.comfort-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d8cec4;
+  border-radius: 999px;
+  background: #fffaf1;
+  color: var(--muted);
+  font-size: 0.96rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.comfort-status.checked {
+  border-color: #a6bbb5;
+  background: #dceeea;
+  color: #365a53;
+}
+
+.comfort-preview {
+  min-height: 68px;
   margin: 0;
   color: var(--ink);
   font-size: 1.22rem;
   line-height: 1.42;
+}
+
+.comfort-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.comfort-actions .primary-button,
+.comfort-actions .ghost-button {
+  padding: 0 16px;
 }
 
 .notice {
@@ -534,6 +585,10 @@ textarea:focus-visible {
 
   .history-panel {
     position: static;
+  }
+
+  .comfort-review-header {
+    display: grid;
   }
 
   .ghost-button,
